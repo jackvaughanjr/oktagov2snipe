@@ -37,6 +37,9 @@ snipe_it:
   license_manufacturer_id: 0             # optional: 0 = auto find/create "Okta" manufacturer
   license_supplier_id: 0                 # optional: 0 = omit from license
 
+slack:
+  webhook_url: ""                         # optional: Slack incoming webhook URL
+
 sync:
   dry_run: false
   force: false
@@ -44,12 +47,13 @@ sync:
 
 ### Environment variable overrides
 
-| Variable       | Config key         |
-|----------------|--------------------|
-| `OKTA_URL`     | `okta.url`         |
-| `OKTA_TOKEN`   | `okta.api_token`   |
-| `SNIPE_URL`    | `snipe_it.url`     |
-| `SNIPE_TOKEN`  | `snipe_it.api_key` |
+| Variable        | Config key             |
+|-----------------|------------------------|
+| `OKTA_URL`      | `okta.url`             |
+| `OKTA_TOKEN`    | `okta.api_token`       |
+| `SNIPE_URL`     | `snipe_it.url`         |
+| `SNIPE_TOKEN`   | `snipe_it.api_key`     |
+| `SLACK_WEBHOOK` | `slack.webhook_url`    |
 
 ## Usage
 
@@ -104,6 +108,18 @@ Validates API connectivity and reports current state. No changes are made.
 | `-d, --debug`     | DEBUG-level logging                            |
 | `--log-file`      | Append logs to a file                          |
 | `--log-format`    | `text` (default) or `json`                     |
+
+## Slack notifications
+
+Set `slack.webhook_url` (or `SLACK_WEBHOOK`) to an [incoming webhook URL](https://api.slack.com/messaging/webhooks) to enable notifications. If omitted, all notifications are silently skipped.
+
+Notifications are suppressed during `--dry-run`. Three events trigger a message:
+
+| Event | Message |
+|-------|---------|
+| Sync failure | Error details |
+| Unmatched user | One message per Okta user with no Snipe-IT account |
+| Sync success | Final counts (checked out, notes updated, checked in, skipped, warnings) |
 
 ## Sync behavior
 

@@ -50,6 +50,7 @@ func initConfig() {
 	viper.BindEnv("okta.api_token", "OKTA_TOKEN")
 	viper.BindEnv("snipe_it.url", "SNIPE_URL")
 	viper.BindEnv("snipe_it.api_key", "SNIPE_TOKEN")
+	viper.BindEnv("slack.webhook_url", "SLACK_WEBHOOK")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

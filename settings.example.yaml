@@ -58,3 +58,12 @@ sync:
   # Snipe-IT API rate limit in milliseconds between requests.
   # 500ms = 2 req/s. Increase if you encounter 429 errors.
   rate_limit_ms: 500
+
+slack:
+  # Incoming webhook URL for Slack notifications.
+  # Optional. If omitted, all Slack notifications are silently skipped.
+  # Notifications are sent for: sync success (with stats), sync failure
+  # (with error details), and unmatched Okta users (no Snipe-IT account).
+  # Notifications are suppressed during dry-run.
+  # Can be overridden with the SLACK_WEBHOOK environment variable.
+  webhook_url: ""

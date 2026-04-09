@@ -34,3 +34,4 @@ go.work.sum
 settings.yaml
 .cache/
 oktagov2snipe
+.DS_Store

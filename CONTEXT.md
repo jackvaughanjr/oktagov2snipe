@@ -1,5 +1,10 @@
 # oktagov2snipe — Integration Context
 
+Cross-cutting conventions, API patterns, and Snipe-IT quirks live in `CLAUDE.md`.
+This file contains only what is specific to the Okta → Snipe-IT integration.
+
+---
+
 ## Purpose
 
 Syncs active users from an **Okta-Gov** (or commercial Okta) organisation into
@@ -31,16 +36,18 @@ the same pattern as the other `*2snipe` integrations in this org.
 main.go
 cmd/
   root.go            # CLI setup, cobra/viper init, logging, env var bindings
-  sync.go            # sync command: --dry-run, --force, --email flags
+  sync.go            # sync command: --dry-run, --force, --email flags; Slack notifications
   test.go            # test command: reports active user count, role holders, license state
 internal/
   okta/
     client.go        # Okta REST client (see below)
+  slack/
+    client.go        # Slack incoming-webhook client
   snipeit/
     client.go        # Snipe-IT API client (see below)
   sync/
     syncer.go        # core sync logic
-    result.go        # Result struct with CheckedOut/NotesUpdated/CheckedIn/Skipped/Warnings
+    result.go        # Result struct
 go.mod
 go.sum
 settings.example.yaml
@@ -68,6 +75,9 @@ snipe_it:
   license_manufacturer_id: 0             # optional: 0 = auto find/create "Okta" manufacturer
   license_supplier_id: 0                 # optional: 0 = omit from license
 
+slack:
+  webhook_url: ""                         # optional: see CLAUDE.md for Slack behavior
+
 sync:
   dry_run: false
   force: false
@@ -76,48 +86,13 @@ sync:
 
 ### Environment variable overrides
 
-| Variable      | Config key          |
-|---------------|---------------------|
-| `OKTA_URL`    | `okta.url`          |
-| `OKTA_TOKEN`  | `okta.api_token`    |
-| `SNIPE_URL`   | `snipe_it.url`      |
-| `SNIPE_TOKEN` | `snipe_it.api_key`  |
-
----
-
-## Commands & Flags
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `test`  | Validate API connections; report active user count, role holders, license state |
-| `sync`  | Run the sync |
-
-### Sync flags
-
-| Flag        | Description                              |
-|-------------|------------------------------------------|
-| `--dry-run` | Simulate without making changes          |
-| `--force`   | Re-sync even if notes appear up to date  |
-| `--email`   | Sync a single user by email address      |
-
-### Global flags
-
-| Flag            | Description                                    |
-|-----------------|------------------------------------------------|
-| `--config`      | Path to config file (default: `settings.yaml`) |
-| `-v, --verbose` | INFO-level logging                             |
-| `-d, --debug`   | DEBUG-level logging                            |
-| `--log-file`    | Append logs to a file                          |
-| `--log-format`  | `text` (default) or `json`                     |
-
-### Important: verbose/debug flag implementation
-
-`--verbose` and `--debug` are wired via `PersistentPreRunE` on the root command,
-**not** `cobra.OnInitialize`. `OnInitialize` fires before flag parsing and cannot
-read flag values. `PersistentPreRunE` fires after — do not move logging init back
-to `OnInitialize`.
+| Variable        | Config key          |
+|-----------------|---------------------|
+| `OKTA_URL`      | `okta.url`          |
+| `OKTA_TOKEN`    | `okta.api_token`    |
+| `SNIPE_URL`     | `snipe_it.url`      |
+| `SNIPE_TOKEN`   | `snipe_it.api_key`  |
+| `SLACK_WEBHOOK` | `slack.webhook_url` |
 
 ---
 
@@ -126,6 +101,7 @@ to `OnInitialize`.
 Lightweight Okta REST API client. No external Okta SDK — plain `net/http`.
 
 ### Auth
+
 `Authorization: SSWS <api_token>` header on every request.  
 Works identically against `*.okta-gov.com` and `*.okta.com`.
 
@@ -137,6 +113,16 @@ Works identically against `*.okta-gov.com` and `*.okta.com`.
 | `ListAllUsers(ctx)` | `GET /api/v1/users?limit=200` | All statuses; used for checkin pass |
 | `GetUserByEmail(ctx, email)` | `GET /api/v1/users/{email}` | Single user lookup |
 | `GetUserRoles(ctx, userID)` | `GET /api/v1/users/{id}/roles` | Returns `[]Role`; Okta 403 → treated as no roles (not an error) |
+
+### Okta API quirks
+
+- **Filter URL encoding**: Filter query strings must use percent-encoding (`%20` for
+  space, `%22` for quotes). Literal quotes in the URL cause a 400 error.
+- **403 on roles**: `GET /api/v1/users/{id}/roles` returns HTTP 403 for regular
+  (non-admin) users in some org configurations. This is **not** an error — treat it
+  as an empty role list and continue.
+- **Pagination**: Okta uses `Link: <url>; rel="next"` response headers. The client
+  parses this header and follows it automatically — no cursor tracking needed in callers.
 
 ### Types
 
@@ -154,23 +140,13 @@ type Role struct {
 }
 ```
 
-### Pagination
-Okta uses `Link: <url>; rel="next"` response headers. The client parses this
-header and follows it automatically — no cursor tracking needed in callers.
-
 ---
 
 ## internal/snipeit/client.go
 
 Snipe-IT REST API client. Rate-limited to 2 req/s via `golang.org/x/time/rate`.
-
-### Auth
-`Authorization: Bearer <api_key>` header on every request.
-
-### Important envelope note
-- **POST / PATCH** responses are wrapped: `{ "status": "success", "messages": {}, "payload": { ... } }`
-- **GET** responses are the object directly (no envelope)
-- Always check `env.Status == "success"` after POST/PATCH — a 200 response can still carry `"status": "error"` with validation messages. `CreateLicense`, `CreateManufacturer`, and `CheckoutSeat` all do this.
+See `CLAUDE.md` for envelope behavior, rate limiting, checkout/checkin rules, and
+FindOrCreate patterns — those apply to all integrations.
 
 ### Methods
 
@@ -178,13 +154,13 @@ Snipe-IT REST API client. Rate-limited to 2 req/s via `golang.org/x/time/rate`.
 |--------|-------------|
 | `FindLicenseByName(ctx, name)` | Search by exact name; returns `nil, nil` if not found |
 | `FindLicenseByID(ctx, id)` | Fetch by numeric ID |
-| `CreateLicense(ctx, name, seats, categoryID, manufacturerID, supplierID)` | Create a new license. `categoryID` required; pass 0 to omit optional IDs |
+| `CreateLicense(ctx, name, seats, categoryID, manufacturerID, supplierID)` | Create a new license; `categoryID` required, pass 0 to omit optional IDs |
 | `FindOrCreateLicense(ctx, name, initialSeats, categoryID, manufacturerID, supplierID)` | Find or create |
 | `UpdateLicenseSeats(ctx, licenseID, seats)` | Expand (or change) seat count |
 | `ListLicenseSeats(ctx, licenseID)` | Returns `[]LicenseSeat` (up to 500) |
-| `CheckoutSeat(ctx, licenseID, seatID, userID, notes)` | Assign seat to user via **PATCH** (not POST — 405 otherwise) |
+| `CheckoutSeat(ctx, licenseID, seatID, userID, notes)` | Assign seat to user via PATCH |
 | `CheckinSeat(ctx, licenseID, seatID)` | Return seat (DELETE endpoint) |
-| `UpdateSeatNotes(ctx, licenseID, seatID, notes)` | PATCH notes on existing checkout |
+| `UpdateSeatNotes(ctx, licenseID, seatID, notes)` | PATCH notes on an existing checkout |
 | `FindUserByEmail(ctx, email)` | Search Snipe-IT users; returns `nil, nil` if not found |
 | `FindManufacturerByName(ctx, name)` | Search by exact name; returns `nil, nil` if not found |
 | `CreateManufacturer(ctx, name, url)` | Create a new manufacturer record |
@@ -244,53 +220,51 @@ type Config struct {
 2. **Build active email set** — used for the checkin pass in step 10
 3. **Apply `--email` filter** — if set, narrow to one user
 4. **Fetch roles per user** — `okta.GetUserRoles()`; 403 → no roles (not fatal)
-5. **Resolve manufacturer** — if `ManufacturerID == 0`, call `snipe.FindOrCreateManufacturer("Okta", "https://www.okta.com")`. Skipped in dry-run.
-6. **Find or create license** — dry-run uses `FindLicenseByName` only; synthesizes a placeholder license (id=0) if not found so the rest of the logic can run. Production uses `FindOrCreateLicense`.
-7. **Expand seats if needed** — if `activeCount > license.Seats`, call `UpdateLicenseSeats(activeCount)`. Seats are **never shrunk automatically**.
-8. **Load current seat assignments** — `snipe.ListLicenseSeats()`; partition into `checkedOutByEmail` map and `freeSeats` slice. Skipped for synthetic dry-run license (id=0). Fails fast in production if id=0.
+5. **Resolve manufacturer** — if `ManufacturerID == 0`, call
+   `snipe.FindOrCreateManufacturer("Okta", "https://www.okta.com")`. Skipped in dry-run.
+6. **Find or create license** — dry-run uses `FindLicenseByName` only; synthesizes a
+   placeholder `&License{Name: ..., Seats: activeCount}` (id=0) if not found.
+   Production uses `FindOrCreateLicense`.
+7. **Expand seats if needed** — if `activeCount > license.Seats`, call
+   `UpdateLicenseSeats(activeCount)`. Seats are **never shrunk automatically**.
+8. **Load current seat assignments** — `snipe.ListLicenseSeats()`; partition into
+   `checkedOutByEmail` map and `freeSeats` slice. Skipped for synthetic dry-run
+   license (id=0). Fails fast in production if id=0.
 9. **Checkout / update loop** — for each active user:
-   - Find Snipe-IT user by email; warn + skip if not found (TODO: Slack notification)
+   - Find Snipe-IT user by email; warn + skip + append to `result.UnmatchedEmails` if not found
    - If already checked out: compare notes; update if changed (or `--force`)
-   - If not checked out: dry-run logs and counts; production pops a free seat and calls `CheckoutSeat`
-10. **Checkin loop** (skipped when `--email` is set) — for each seat checked out to an email not in the active set: `CheckinSeat`
+   - If not checked out: dry-run logs and counts; production pops a free seat and
+     calls `CheckoutSeat`
+10. **Checkin loop** (skipped when `--email` is set) — for each seat checked out to
+    an email not in the active set: `CheckinSeat`
 
 ### Role notes format
+
+Okta role labels are written to the seat's `notes` field, sorted alphabetically:
 
 ```
 Okta roles: Label1, Label2, Label3
 ```
-Labels are sorted alphabetically. Empty string if the user has no roles.
 
-### Result struct
+Empty string if the user has no roles.
 
-```go
-type Result struct {
-    CheckedOut   int  // seats newly assigned
-    NotesUpdated int  // seats whose notes were updated
-    CheckedIn    int  // seats returned for inactive users
-    Skipped      int  // users already up to date
-    Warnings     int  // users with no matching Snipe-IT account, or API errors
-}
-```
-
----
-
-## Pending TODOs
-
-- `cmd/sync.go`: Slack notification on sync failure (with error details)
-- `cmd/sync.go`: Slack notification on sync success (with result stats)
-- `internal/sync/syncer.go`: Slack notification on unmatched user (with email)
-
----
-
-## User Matching
-
-Users are matched by **email address**. Snipe-IT users are provisioned via
-Okta LDAP sync using the same Okta tenant, so the email in Okta is a stable
-and reliable match key.
+### User matching
 
 `emailKey(user)` prefers `profile.email`; falls back to `profile.login`.
 All comparisons are lowercased.
+
+---
+
+## Slack notification messages
+
+Messages sent by `cmd/sync.go` for this integration (see `CLAUDE.md` for the
+general Slack pattern — when to send, how errors are handled, dry-run suppression):
+
+| Event | Message |
+|-------|---------|
+| Sync failure | `oktagov2snipe sync failed: <error>` |
+| Unmatched user | `oktagov2snipe: no Snipe-IT account found for Okta user — <email>` (one per user) |
+| Sync success | `oktagov2snipe sync complete — checked out: N, notes updated: N, checked in: N, skipped: N, warnings: N` |
 
 ---
 
@@ -314,18 +288,3 @@ go build -o oktagov2snipe .
 # Single user
 ./oktagov2snipe sync --email user@example.com -v
 ```
-
----
-
-## Notes for Claude Code
-
-- `go.sum` will be generated by `go mod tidy` — do not create it manually
-- `settings.yaml` is gitignored — never commit it; use `settings.example.yaml` as the template
-- The binary name matches the repo: `oktagov2snipe`
-- Snipe-IT POST/PATCH responses use the `{ status, messages, payload }` envelope — always check `env.Status == "success"` after decoding, not just the HTTP status code
-- Okta's `/api/v1/users/{id}/roles` returns HTTP 403 for regular (non-admin) users in some org configurations — this is **not** an error; treat it as an empty role list
-- Okta filter queries must use percent-encoded characters (`%20` for space, `%22` for quotes) — literal quotes in the URL cause a 400
-- `CheckoutSeat` uses **PATCH**, not POST — POST returns 405
-- `license_category_id` is required by Snipe-IT to create a license — the sync command validates this before starting
-- Rate limit Snipe-IT calls to 2 req/s (`rate.Every(500ms)`) to avoid 429s
-- `--verbose` / `--debug` flags must be initialized in `PersistentPreRunE`, not `cobra.OnInitialize` — `OnInitialize` runs before flag parsing

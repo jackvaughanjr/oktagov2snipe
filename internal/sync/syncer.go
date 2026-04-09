@@ -169,7 +169,7 @@ func (s *Syncer) Run(ctx context.Context, emailFilter string) (Result, error) {
 		}
 		if snipeUser == nil {
 			slog.Warn("no Snipe-IT user found for Okta user", "email", email)
-			// TODO(slack): send unmatched-user notification with email
+			result.UnmatchedEmails = append(result.UnmatchedEmails, email)
 			result.Warnings++
 			continue
 		}

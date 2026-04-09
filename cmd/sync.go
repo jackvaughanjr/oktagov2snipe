@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/jackvaughanjr/oktagov2snipe/internal/okta"
+	"github.com/jackvaughanjr/oktagov2snipe/internal/slack"
 	"github.com/jackvaughanjr/oktagov2snipe/internal/snipeit"
 	"github.com/jackvaughanjr/oktagov2snipe/internal/sync"
 	"github.com/spf13/cobra"
@@ -64,16 +65,40 @@ func runSync(cmd *cobra.Command, args []string) error {
 		slog.Info("dry-run mode enabled — no changes will be made")
 	}
 
+	slackClient := slack.NewClient(viper.GetString("slack.webhook_url"))
+	ctx := context.Background()
+
 	syncer := sync.NewSyncer(oktaClient, snipeClient, cfg)
-	result, err := syncer.Run(context.Background(), emailFilter)
+	result, err := syncer.Run(ctx, emailFilter)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sync failed: %v\n", err)
-		// TODO(slack): send failure notification with error details
+		if !cfg.DryRun {
+			msg := fmt.Sprintf("oktagov2snipe sync failed: %v", err)
+			if notifyErr := slackClient.Send(ctx, msg); notifyErr != nil {
+				slog.Warn("slack notification failed", "error", notifyErr)
+			}
+		}
 		return err
+	}
+
+	if !cfg.DryRun {
+		for _, email := range result.UnmatchedEmails {
+			msg := fmt.Sprintf("oktagov2snipe: no Snipe-IT account found for Okta user — %s", email)
+			if notifyErr := slackClient.Send(ctx, msg); notifyErr != nil {
+				slog.Warn("slack notification failed", "email", email, "error", notifyErr)
+			}
+		}
+
+		msg := fmt.Sprintf(
+			"oktagov2snipe sync complete — checked out: %d, notes updated: %d, checked in: %d, skipped: %d, warnings: %d",
+			result.CheckedOut, result.NotesUpdated, result.CheckedIn, result.Skipped, result.Warnings,
+		)
+		if notifyErr := slackClient.Send(ctx, msg); notifyErr != nil {
+			slog.Warn("slack notification failed", "error", notifyErr)
+		}
 	}
 
 	fmt.Printf("Sync complete: checked_out=%d notes_updated=%d checked_in=%d skipped=%d warnings=%d\n",
 		result.CheckedOut, result.NotesUpdated, result.CheckedIn, result.Skipped, result.Warnings)
-	// TODO(slack): send success notification with result stats (checked_out, notes_updated, checked_in, skipped, warnings)
 	return nil
 }
