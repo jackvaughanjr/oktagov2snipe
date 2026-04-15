@@ -26,6 +26,7 @@ func init() {
 	syncCmd.Flags().Bool("dry-run", false, "simulate without making changes")
 	syncCmd.Flags().Bool("force", false, "re-sync even if notes appear up to date")
 	syncCmd.Flags().String("email", "", "sync a single user by email address")
+	syncCmd.Flags().Bool("no-slack", false, "suppress Slack notifications for this run")
 
 	_ = viper.BindPFlag("sync.dry_run", syncCmd.Flags().Lookup("dry-run"))
 	_ = viper.BindPFlag("sync.force", syncCmd.Flags().Lookup("force"))
@@ -42,6 +43,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	)
 
 	emailFilter, _ := cmd.Flags().GetString("email")
+	noSlack, _ := cmd.Flags().GetBool("no-slack")
 
 	categoryID := viper.GetInt("snipe_it.license_category_id")
 	if categoryID == 0 {
@@ -72,7 +74,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	result, err := syncer.Run(ctx, emailFilter)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sync failed: %v\n", err)
-		if !cfg.DryRun {
+		if !cfg.DryRun && !noSlack {
 			msg := fmt.Sprintf("okta2snipe sync failed: %v", err)
 			if notifyErr := slackClient.Send(ctx, msg); notifyErr != nil {
 				slog.Warn("slack notification failed", "error", notifyErr)
@@ -81,7 +83,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if !cfg.DryRun {
+	if !cfg.DryRun && !noSlack {
 		for _, email := range result.UnmatchedEmails {
 			msg := fmt.Sprintf("okta2snipe: no Snipe-IT account found for Okta user — %s", email)
 			if notifyErr := slackClient.Send(ctx, msg); notifyErr != nil {

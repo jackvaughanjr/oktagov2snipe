@@ -118,9 +118,10 @@ Validates API connectivity and reports current state. No changes are made.
 
 | Flag        | Description                                      |
 |-------------|--------------------------------------------------|
-| `--dry-run` | Simulate without making changes                  |
-| `--force`   | Re-sync even if seat notes appear up to date     |
-| `--email`   | Sync a single user by email address              |
+| `--dry-run`  | Simulate without making changes                              |
+| `--force`    | Re-sync even if seat notes appear up to date                 |
+| `--email`    | Sync a single user by email address                          |
+| `--no-slack` | Suppress Slack notifications for this run (not saved to config) |
 
 ### Global flags
 
@@ -136,7 +137,7 @@ Validates API connectivity and reports current state. No changes are made.
 
 Set `slack.webhook_url` (or `SLACK_WEBHOOK`) to an [incoming webhook URL](https://api.slack.com/messaging/webhooks) to enable notifications. If omitted, all notifications are silently skipped.
 
-Notifications are suppressed during `--dry-run`. Three events trigger a message:
+Notifications are suppressed during `--dry-run` or when `--no-slack` is passed. Three events trigger a message:
 
 | Event | Message |
 |-------|---------|
@@ -171,5 +172,6 @@ Empty string if the user has no roles.
 
 | Version | Key changes |
 |---------|-------------|
-| v1.0.0 | Initial build — sync Okta Gov users into Snipe-IT license seats; release workflow; Slack notifications |
+| v1.1.0 | Added `--no-slack` flag to suppress Slack notifications for a single run |
 | v1.0.1 | Documentation updates for release workflow and CLAUDE.md |
+| v1.0.0 | Initial build — sync Okta Gov users into Snipe-IT license seats; release workflow; Slack notifications |
