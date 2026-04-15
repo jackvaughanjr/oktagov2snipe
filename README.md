@@ -1,5 +1,7 @@
 # okta2snipe
 
+[![Latest Release](https://img.shields.io/github/v/release/jackvaughanjr/okta2snipe)](https://github.com/jackvaughanjr/okta2snipe/releases/latest) [![Go Version](https://img.shields.io/github/go-mod/go-version/jackvaughanjr/okta2snipe)](go.mod) [![License](https://img.shields.io/github/license/jackvaughanjr/okta2snipe)](LICENSE) [![Build](https://github.com/jackvaughanjr/okta2snipe/actions/workflows/release.yml/badge.svg)](https://github.com/jackvaughanjr/okta2snipe/actions/workflows/release.yml) [![Go Report Card](https://goreportcard.com/badge/github.com/jackvaughanjr/okta2snipe)](https://goreportcard.com/report/github.com/jackvaughanjr/okta2snipe) [![Downloads](https://img.shields.io/github/downloads/jackvaughanjr/okta2snipe/total)](https://github.com/jackvaughanjr/okta2snipe/releases)
+
 Syncs active users from an Okta (or Okta-Gov) organization into [Snipe-IT](https://snipeit.app) as license seat assignments. Users are matched by email address. Role assignments are recorded in the seat's notes field.
 
 ## Installation
