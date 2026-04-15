@@ -4,6 +4,8 @@
 
 Syncs active users from an Okta (or Okta-Gov) organization into [Snipe-IT](https://snipeit.app) as license seat assignments. Users are matched by email address. Role assignments are recorded in the seat's notes field.
 
+> Part of the [\*2snipe](https://github.com/jackvaughanjr?tab=repositories&q=2snipe) integration family, inspired by [CampusTech](https://github.com/CampusTech)'s Snipe-IT integrations.
+
 ## Installation
 
 **Download a pre-built binary** (recommended) from the [latest release](https://github.com/jackvaughanjr/okta2snipe/releases/latest):
@@ -172,6 +174,7 @@ Empty string if the user has no roles.
 
 | Version | Key changes |
 |---------|-------------|
+| v1.2.0 | Make Snipe-IT API rate limit configurable via `sync.rate_limit_ms` and `SNIPE_RATE_LIMIT_MS` env var |
 | v1.1.1 | Fixed seat assignment tracking — seats were re-checked-out on every run due to incorrect JSON field tag |
 | v1.1.0 | Added `--no-slack` flag to suppress Slack notifications for a single run |
 | v1.0.1 | Documentation updates for release workflow and CLAUDE.md |
