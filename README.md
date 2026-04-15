@@ -164,3 +164,10 @@ Okta roles: Internal App Administrator, Super Administrator
 ```
 
 Empty string if the user has no roles.
+
+## Version History
+
+| Version | Key changes |
+|---------|-------------|
+| v1.0.0 | Initial build — sync Okta Gov users into Snipe-IT license seats; release workflow; Slack notifications |
+| v1.0.1 | Documentation updates for release workflow and CLAUDE.md |
