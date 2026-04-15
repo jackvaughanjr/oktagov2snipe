@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jackvaughanjr/2snipe-manager/main/2snipe.schema.json",
+  "name": "okta2snipe",
+  "display_name": "Okta",
+  "description": "Sync Okta organization members to Snipe-IT license seats",
+  "version": "1.2.0",
+  "min_snipemgr": "0.1.0",
+  "tags": ["saas", "identity", "iam"],
+  "category": "Identity & Access Management",
+  "config_schema": [
+    {
+      "key": "okta.url",
+      "label": "Okta Organization URL",
+      "secret": false,
+      "required": true,
+      "hint": "e.g. https://your-org.okta.com"
+    },
+    {
+      "key": "okta.api_token",
+      "label": "Okta API Token",
+      "secret": true,
+      "required": true,
+      "hint": "Admin → Security → API → Tokens (SSWS token with read:users and read:roles)"
+    },
+    {
+      "key": "snipe_it.url",
+      "label": "Snipe-IT URL",
+      "secret": false,
+      "required": true,
+      "hint": "e.g. https://snipe.example.com"
+    },
+    {
+      "key": "snipe_it.api_key",
+      "label": "Snipe-IT API Key",
+      "secret": true,
+      "required": true,
+      "hint": "Admin → API Keys in your Snipe-IT instance"
+    },
+    {
+      "key": "snipe_it.license_category_id",
+      "label": "Snipe-IT License Category ID",
+      "secret": false,
+      "required": true,
+      "hint": "Find at Admin → Categories (integer ID)"
+    },
+    {
+      "key": "snipe_it.license_name",
+      "label": "Snipe-IT License Name",
+      "secret": false,
+      "required": false,
+      "default": "Okta",
+      "hint": "Name of the license record in Snipe-IT; created automatically on first run"
+    },
+    {
+      "key": "slack.webhook_url",
+      "label": "Slack Webhook URL",
+      "secret": true,
+      "required": false,
+      "hint": "Optional. Incoming webhook for sync notifications"
+    }
+  ],
+  "shared_config": ["snipe_it"],
+  "commands": {
+    "sync": true,
+    "test": true
+  },
+  "releases": {
+    "github_releases": true,
+    "asset_pattern": "okta2snipe-{os}-{arch}"
+  }
+}
